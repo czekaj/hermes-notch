@@ -81,9 +81,11 @@ def build_card(parsed: dict, mtime: datetime | None) -> dict:
     triage = sections.get("triage", [])
 
     # Protocol words (done/skip/…) only make sense while a step is open;
-    # otherwise the sole offered action is starting a new batch — a stray
-    # `done` right after /adhd could close a just-served task at source.
-    step_actions = ["done", "skip", "smaller", "why", "pause"]
+    # otherwise the offered actions are starting a new batch and refreshing —
+    # a stray `done` right after /adhd could close a just-served task at
+    # source. `why` stays declared but off the button row (typeable); five
+    # visible buttons max per the design doc.
+    step_actions = ["done", "skip", "smaller", "pause", "refresh"]
     if open_steps:
         actions_enabled = step_actions
         step = open_steps[0]
@@ -100,7 +102,7 @@ def build_card(parsed: dict, mtime: datetime | None) -> dict:
         }
         title = f"Step {pos} of {total}"
     elif next_items:
-        actions_enabled = ["start"]
+        actions_enabled = ["start", "refresh"]
         glance = {
             "text": f"Batch clear — next up: {next_items[0]['text']}"[:60],
             "detail": f"{len(next_items)} queued",
@@ -108,7 +110,7 @@ def build_card(parsed: dict, mtime: datetime | None) -> dict:
         }
         title = "Batch clear"
     else:
-        actions_enabled = ["start"]
+        actions_enabled = ["start", "refresh"]
         glance = {"text": "Focus queue empty", "detail": "start a batch to build one", "urgency": "normal"}
         title = "Focus"
 
