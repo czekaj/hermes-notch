@@ -1,0 +1,9 @@
+{
+  "name": "hermes-notch",
+  "label": "Hermes Notch",
+  "description": "Widget host for the Hermes Notch HUD app — serves widget specs and render-ready Cards, executes widget actions.",
+  "icon": "Sparkles",
+  "version": "0.1.0",
+  "tab": { "path": "/hermes-notch", "hidden": true },
+  "api": "plugin_api.py"
+}

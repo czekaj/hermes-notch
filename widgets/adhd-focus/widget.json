@@ -1,0 +1,26 @@
+{
+  "spec": 1,
+  "id": "adhd-focus",
+  "name": "Focus",
+  "icon": "🎯",
+  "description": "One step at a time over the personal task universe (adhd-focus skill). Glance = current open step from the queue file; actions talk to a live focus session.",
+  "source": {
+    "type": "chat",
+    "on_start": "/adhd",
+    "glance": { "type": "script", "command": ["python3", "state.py", "--glance"] }
+  },
+  "refresh": { "interval": 60, "while_visible": 15 },
+  "actions": [
+    { "id": "done",    "label": "Done",    "icon": "✓", "style": "primary",
+      "effect": { "type": "chat", "text": "done" } },
+    { "id": "skip",    "label": "Skip",    "icon": "→",
+      "effect": { "type": "chat", "text": "skip" } },
+    { "id": "smaller", "label": "Smaller", "icon": "✂",
+      "effect": { "type": "chat", "text": "smaller" } },
+    { "id": "why",     "label": "Why",     "icon": "?",
+      "effect": { "type": "chat", "text": "why" } },
+    { "id": "pause",   "label": "Pause",   "icon": "⏸", "style": "danger",
+      "effect": { "type": "chat", "text": "pause" } }
+  ],
+  "input": { "placeholder": "veto / park / anything…", "effect": { "type": "chat" } }
+}

@@ -1,0 +1,11 @@
+# build outputs
+app/dist/
+app/node_modules/
+app/src-tauri/target/
+app/src-tauri/gen/schemas/
+
+# local state
+__pycache__/
+*.pyc
+.DS_Store
+*.log
