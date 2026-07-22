@@ -251,9 +251,12 @@ pub fn set_expanded(
     app: AppHandle,
     state: State<'_, AppState>,
     expanded: bool,
+    width: Option<f64>,
+    height: Option<f64>,
 ) -> Result<(), String> {
     let fallback = state.geometry().unwrap_or_default();
-    let geo = measure_and_apply(&app, expanded, fallback)?;
+    let measured = width.zip(height);
+    let geo = measure_and_apply(&app, expanded, measured, fallback)?;
     state.set_geometry(geo);
     Ok(())
 }
@@ -271,16 +274,26 @@ pub fn panel_info(app: AppHandle, state: State<'_, AppState>) -> PanelInfo {
     }
 }
 
-/// Re-measure geometry on the main thread and apply the panel frame.
+/// Re-measure geometry on the main thread, fold in the frontend-measured shape
+/// size for this state, and apply the panel frame.
 #[cfg(target_os = "macos")]
-fn measure_and_apply(app: &AppHandle, expanded: bool, fallback: Geometry) -> Result<Geometry, String> {
+fn measure_and_apply(
+    app: &AppHandle,
+    expanded: bool,
+    measured: Option<(f64, f64)>,
+    fallback: Geometry,
+) -> Result<Geometry, String> {
     use crate::{geometry, panel};
     let (tx, rx) = std::sync::mpsc::channel();
     let app2 = app.clone();
     app.run_on_main_thread(move || {
-        let geo = objc2_foundation::MainThreadMarker::new()
+        let mut geo = objc2_foundation::MainThreadMarker::new()
             .map(geometry::compute)
             .unwrap_or_default();
+        geo.carry_measured_from(&fallback);
+        if let Some((w, h)) = measured {
+            geo.set_measured(expanded, w, h);
+        }
         panel::apply_frame(&app2, &geo, expanded);
         let _ = tx.send(geo);
     })
@@ -291,7 +304,12 @@ fn measure_and_apply(app: &AppHandle, expanded: bool, fallback: Geometry) -> Res
 }
 
 #[cfg(not(target_os = "macos"))]
-fn measure_and_apply(_app: &AppHandle, _expanded: bool, fallback: Geometry) -> Result<Geometry, String> {
+fn measure_and_apply(
+    _app: &AppHandle,
+    _expanded: bool,
+    _measured: Option<(f64, f64)>,
+    fallback: Geometry,
+) -> Result<Geometry, String> {
     Ok(fallback)
 }
 
@@ -302,9 +320,10 @@ fn measure(app: &AppHandle, fallback: Geometry) -> Geometry {
     let (tx, rx) = std::sync::mpsc::channel();
     if app
         .run_on_main_thread(move || {
-            let geo = objc2_foundation::MainThreadMarker::new()
+            let mut geo = objc2_foundation::MainThreadMarker::new()
                 .map(geometry::compute)
                 .unwrap_or_default();
+            geo.carry_measured_from(&fallback);
             let _ = tx.send(geo);
         })
         .is_ok()

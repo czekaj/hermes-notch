@@ -35,6 +35,13 @@ pub struct Geometry {
     collapsed_h: f64,
     expanded_w: f64,
     expanded_h: f64,
+
+    /// Shape sizes measured by the frontend (offsetWidth/offsetHeight of the
+    /// visible pill/panel). The window must match the visible shape exactly:
+    /// the vibrancy layer fills the whole window, so any window area outside
+    /// the CSS shape renders as a bare frosted-glass rectangle.
+    measured_collapsed: Option<(f64, f64)>,
+    measured_expanded: Option<(f64, f64)>,
 }
 
 impl Default for Geometry {
@@ -49,10 +56,12 @@ impl Default for Geometry {
             screen_y: 0.0,
             screen_w: 1440.0,
             screen_h: 900.0,
-            collapsed_w: 300.0,
-            collapsed_h: 32.0,
+            collapsed_w: 480.0,
+            collapsed_h: 44.0,
             expanded_w: 420.0,
             expanded_h: 340.0,
+            measured_collapsed: None,
+            measured_expanded: None,
         }
     }
 }
@@ -62,15 +71,43 @@ impl Geometry {
     /// the window's top edge stays glued to the screen top and it stays centered
     /// on the notch (top-center of the main display).
     pub fn cocoa_frame(&self, expanded: bool) -> (f64, f64, f64, f64) {
-        let (w, h) = if expanded {
+        let measured = if expanded {
+            self.measured_expanded
+        } else {
+            self.measured_collapsed
+        };
+        let (w, h) = measured.unwrap_or(if expanded {
             (self.expanded_w, self.expanded_h)
         } else {
             (self.collapsed_w, self.collapsed_h)
+        });
+        // Clamp to sane bounds; on a notch the pill must still cover the island.
+        let min_w = if self.has_notch && !expanded {
+            self.notch_width + 24.0
+        } else {
+            120.0
         };
+        let w = w.clamp(min_w, self.screen_w);
+        let h = h.clamp(24.0, self.screen_h * 0.7);
         let screen_top = self.screen_y + self.screen_h; // Cocoa top edge (y-up)
         let x = self.screen_x + (self.screen_w - w) / 2.0;
         let y = screen_top - h; // bottom origin so the top edge == screen_top
         (x, y, w, h)
+    }
+
+    /// Record a frontend-measured shape size for one state.
+    pub fn set_measured(&mut self, expanded: bool, w: f64, h: f64) {
+        if expanded {
+            self.measured_expanded = Some((w, h));
+        } else {
+            self.measured_collapsed = Some((w, h));
+        }
+    }
+
+    /// Carry previously measured sizes into a freshly computed geometry.
+    pub fn carry_measured_from(&mut self, prev: &Geometry) {
+        self.measured_collapsed = prev.measured_collapsed;
+        self.measured_expanded = prev.measured_expanded;
     }
 }
 
@@ -126,12 +163,16 @@ fn build(
     screen_w: f64,
     screen_h: f64,
 ) -> Geometry {
-    // Collapsed: on a notch, extend the black pill 320pt so the glance "wings"
-    // show beside the camera island; on external displays, a fixed 300pt strip.
-    let collapsed_w = if has_notch { notch_width + 320.0 } else { 300.0 };
-    let collapsed_h = notch_height;
-    // Expanded: 420 wide, or wider if the collapsed pill already exceeds it.
-    let expanded_w = collapsed_w.max(420.0);
+    // Pre-measurement defaults only — the frontend reports the real shape size
+    // via set_expanded(width, height) as soon as it paints (see cocoa_frame).
+    // Collapsed: on a notch, the pill extends beside the island and the glance
+    // line hangs 28pt below it; on external displays, a floating 480×44 pill.
+    let (collapsed_w, collapsed_h) = if has_notch {
+        (notch_width + 320.0, notch_height + 28.0)
+    } else {
+        (480.0, 44.0)
+    };
+    let expanded_w = 420.0;
     let expanded_h = 340.0;
 
     Geometry {
@@ -147,5 +188,7 @@ fn build(
         collapsed_h,
         expanded_w,
         expanded_h,
+        measured_collapsed: None,
+        measured_expanded: None,
     }
 }

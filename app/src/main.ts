@@ -126,6 +126,7 @@ function paintStrip(): void {
   if (stripEl) stripEl.replaceWith(next);
   else hud.insertBefore(next, panel.el);
   stripEl = next;
+  syncFrame();
 }
 
 function panelData(): PanelData {
@@ -157,6 +158,27 @@ function paintPanel(): void {
   panel.update(panelData());
   panel.setSettings(state.settings, settingsCtx());
   panel.showSettings(state.showSettings || state.forcedSettings);
+  syncFrame();
+}
+
+// --- window/shape sync -----------------------------------------------------
+// The native window must match the visible CSS shape exactly: the vibrancy
+// layer fills the whole window, so any excess shows as a bare glass rectangle
+// (and a too-small window clips the shape). Measure with offset* metrics —
+// they ignore the entrance transform — and report to the Rust side.
+let frameSyncQueued = false;
+function syncFrame(): void {
+  if (frameSyncQueued) return;
+  frameSyncQueued = true;
+  requestAnimationFrame(() => {
+    frameSyncQueued = false;
+    const el = state.expanded ? panel.el : stripEl;
+    if (!el) return;
+    const w = el.offsetWidth;
+    const h = el.offsetTop + el.offsetHeight;
+    if (w < 40 || h < 20) return; // not laid out yet
+    void api.setExpanded(state.expanded, Math.ceil(w) + 2, Math.ceil(h) + 2);
+  });
 }
 
 // --- connection ----------------------------------------------------------
@@ -203,9 +225,8 @@ function forceSettings(): void {
   state.expanded = true;
   hud.classList.remove("is-collapsed");
   hud.classList.add("is-expanded");
-  void api.setExpanded(true);
   paintStrip();
-  paintPanel();
+  paintPanel(); // syncFrame() inside sizes the window to the settings card
   panel.playEntrance();
 }
 
@@ -270,10 +291,9 @@ async function expand(): Promise<void> {
   if (state.expanded) return;
   state.expanded = true;
   clearGrace();
-  await api.setExpanded(true);
   hud.classList.remove("is-collapsed");
   hud.classList.add("is-expanded");
-  paintPanel();
+  paintPanel(); // paints, then syncFrame() sizes the window to the panel
   panel.playEntrance();
   void refreshActive();
   restartPollers();
@@ -290,7 +310,8 @@ function collapse(): void {
   panel.showSettings(false);
   state.activeId = pickShownId();
   paintStrip();
-  window.setTimeout(() => void api.setExpanded(false), COLLAPSE_SHRINK_MS);
+  // Shrink the window only after the collapse animation has played out.
+  window.setTimeout(() => syncFrame(), COLLAPSE_SHRINK_MS);
   restartPollers();
 }
 
@@ -443,6 +464,9 @@ async function boot(): Promise<void> {
   });
   hud.append(panel.el);
   paintStrip();
+
+  // Content-driven resizes (chat streaming, settings flip) → window follows.
+  new ResizeObserver(() => syncFrame()).observe(panel.el);
 
   // Notch geometry → CSS vars so the strip hugs the island exactly.
   try {

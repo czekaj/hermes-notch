@@ -92,8 +92,14 @@ export const chatInterrupt = (widgetId: string): Promise<void> =>
   call("chat_interrupt", { widgetId });
 
 // --- panel geometry ------------------------------------------------------
-export const setExpanded = (expanded: boolean): Promise<void> =>
-  call("set_expanded", { expanded });
+// width/height are the measured size of the visible CSS shape (pill or panel);
+// the Rust side sizes the window to match exactly — the vibrancy layer fills
+// the window, so any excess renders as a bare frosted-glass rectangle.
+export const setExpanded = (
+  expanded: boolean,
+  width?: number,
+  height?: number,
+): Promise<void> => call("set_expanded", { expanded, width, height });
 export const panelInfo = (): Promise<PanelInfo> => call("panel_info");
 
 // --- utilities -----------------------------------------------------------

@@ -46,12 +46,14 @@ mod imp {
             .get_webview_window("main")
             .ok_or("main window is missing")?;
 
-        // Apply HUD vibrancy before converting to a panel.
+        // Apply HUD vibrancy before converting to a panel. The 14pt radius
+        // matches the CSS panel radius; the window is always sized to the
+        // visible CSS shape, so no bare glass shows outside it.
         window_vibrancy::apply_vibrancy(
             &window,
             window_vibrancy::NSVisualEffectMaterial::HudWindow,
             None,
-            None,
+            Some(14.0),
         )
         .map_err(|e| format!("failed to apply vibrancy: {e}"))?;
 
@@ -80,10 +82,31 @@ mod imp {
         let handler = NotchPanelHandler::new();
         let enter_app = app.clone();
         handler.on_mouse_entered(move |_event| {
+            #[cfg(debug_assertions)]
+            eprintln!("[notch] hover: enter");
             let _ = enter_app.emit("notch:hover", json!({ "entered": true }));
         });
         let exit_app = app.clone();
         handler.on_mouse_exited(move |_event| {
+            // Resizing the window rebuilds the NSTrackingArea, which fires a
+            // spurious mouse-exited even when the cursor hasn't moved — that
+            // caused an expand/collapse feedback loop. Only forward the exit
+            // if the mouse is genuinely outside the panel frame.
+            if let Ok(panel) = exit_app.get_webview_panel("main") {
+                let frame = panel.as_panel().frame();
+                let loc = objc2_app_kit::NSEvent::mouseLocation();
+                let inside = loc.x >= frame.origin.x - 1.0
+                    && loc.x <= frame.origin.x + frame.size.width + 1.0
+                    && loc.y >= frame.origin.y - 1.0
+                    && loc.y <= frame.origin.y + frame.size.height + 1.0;
+                if inside {
+                    #[cfg(debug_assertions)]
+                    eprintln!("[notch] hover: suppressed spurious exit (mouse still inside)");
+                    return;
+                }
+            }
+            #[cfg(debug_assertions)]
+            eprintln!("[notch] hover: exit");
             let _ = exit_app.emit("notch:hover", json!({ "entered": false }));
         });
         panel.set_event_handler(Some(handler.as_ref()));
@@ -98,6 +121,14 @@ mod imp {
     /// MUST be called on the main thread.
     pub fn apply_frame(app: &AppHandle, geo: &Geometry, expanded: bool) {
         let (x, y, w, h) = geo.cocoa_frame(expanded);
+        #[cfg(debug_assertions)]
+        eprintln!(
+            "[notch] frame {}: {w:.0}x{h:.0} at ({x:.0},{y:.0}) notch={:.0}x{:.0} has_notch={}",
+            if expanded { "expanded" } else { "collapsed" },
+            geo.notch_width,
+            geo.notch_height,
+            geo.has_notch,
+        );
         if let Ok(panel) = app.get_webview_panel("main") {
             let rect = NSRect::new(NSPoint::new(x, y), NSSize::new(w, h));
             // NSPanel derefs to NSWindow; set the full frame in Cocoa coords.

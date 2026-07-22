@@ -142,7 +142,13 @@ chat_interrupt(widgetId: string): void
 // ChatStatus = { session_id: string, fresh: boolean }
 
 // panel geometry (Rust owns the NSPanel frame, anchored to the notch top-center)
-set_expanded(expanded: boolean): void        // resizes/positions the panel window
+set_expanded(expanded: boolean,
+             width?: number, height?: number): void
+// width/height = the measured size (offset metrics) of the visible CSS shape
+// (collapsed pill or expanded panel). The window is sized to match EXACTLY:
+// the vibrancy layer fills the window, so excess area renders as bare glass
+// and a too-small window clips the shape. The frontend re-reports on every
+// paint and content resize (ResizeObserver).
 panel_info(): PanelInfo
 // PanelInfo = { has_notch: boolean, notch_width: number, notch_height: number, scale: number }
 
