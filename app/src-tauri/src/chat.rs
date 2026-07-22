@@ -94,11 +94,16 @@ impl Chat {
                 reply,
             })
             .map_err(|_| "chat transport is not running".to_string())?;
-        match tokio::time::timeout(Duration::from_secs(30), rx).await {
+        let out = match tokio::time::timeout(Duration::from_secs(30), rx).await {
             Ok(Ok(res)) => res,
             Ok(Err(_)) => Err("chat request was dropped".to_string()),
             Err(_) => Err("chat request timed out".to_string()),
+        };
+        #[cfg(debug_assertions)]
+        if let Err(e) = &out {
+            eprintln!("[notch] chat: rpc {method} failed: {e}");
         }
+        out
     }
 
     // ---- session bookkeeping ----
@@ -295,25 +300,50 @@ impl Chat {
             return self.submit(session_id, input).await;
         }
 
-        // 1) slash.exec — first stop for "/name" inputs.
-        if self
+        // 1) slash.exec — handles dashboard built-ins, and for skills it loads
+        //    the skill into the live session's context ("⚡ Loading skill: …")
+        //    WITHOUT running an agent turn. Its success must NOT end the chain:
+        //    the dispatch step below yields the actual message that makes the
+        //    agent run. Keep its output to resolve slash-only commands.
+        let slash_output: Option<String> = match self
             .rpc(
                 "slash.exec",
                 json!({ "command": name, "session_id": session_id }),
             )
             .await
-            .is_ok()
         {
-            return Ok(());
-        }
+            Ok(res) => Some(
+                res.get("output")
+                    .and_then(|o| o.as_str())
+                    .unwrap_or("")
+                    .trim()
+                    .to_string(),
+            ),
+            Err(_) => None,
+        };
 
         // 2) command.dispatch — quick_commands / skills / aliases.
-        let res = self
+        let res = match self
             .rpc(
                 "command.dispatch",
                 json!({ "name": name, "arg": arg, "session_id": session_id }),
             )
-            .await?;
+            .await
+        {
+            Ok(res) => res,
+            Err(e) => {
+                // Dispatch doesn't know the command. If slash.exec handled it,
+                // render its output as the completed reply; else it's a failure.
+                return match slash_output {
+                    Some(out) => {
+                        let text = if out.is_empty() { format!("/{name} ✓") } else { out };
+                        self.emit_event(widget_id, "complete", Some(&text));
+                        Ok(())
+                    }
+                    None => Err(e),
+                };
+            }
+        };
         match res.get("type").and_then(|t| t.as_str()) {
             Some("alias") => {
                 let target = res.get("target").and_then(|t| t.as_str()).unwrap_or("");
@@ -336,14 +366,24 @@ impl Chat {
             _ => {
                 if let Some(msg) = res.get("message").and_then(|m| m.as_str()) {
                     self.submit(session_id, msg).await
-                } else {
+                } else if let Some(out) = slash_output {
+                    // Nothing to submit — a slash-only command; show its output.
+                    let text = if out.is_empty() { format!("/{name} ✓") } else { out };
+                    self.emit_event(widget_id, "complete", Some(&text));
                     Ok(())
+                } else {
+                    Err(format!("/{name}: nothing to run (unknown command?)"))
                 }
             }
         }
     }
 
     async fn submit(&self, session_id: &str, text: &str) -> Result<(), String> {
+        #[cfg(debug_assertions)]
+        eprintln!(
+            "[notch] chat: prompt.submit to {session_id} ({} chars)",
+            text.len()
+        );
         self.rpc(
             "prompt.submit",
             json!({ "session_id": session_id, "text": text }),
@@ -540,7 +580,13 @@ fn route_event(params: Option<&Value>, app: &AppHandle, sessions: &Arc<Mutex<Ses
         .and_then(|s| s.by_live.get(session_id).cloned())
     {
         Some(w) => w,
-        None => return,
+        None => {
+            #[cfg(debug_assertions)]
+            if typ.starts_with("message.") {
+                eprintln!("[notch] chat: dropped {typ} for unowned session {session_id}");
+            }
+            return;
+        }
     };
 
     let text_field = |keys: &[&str]| -> Option<String> {

@@ -384,14 +384,14 @@ function handleAction(actionId: string): void {
   // chat effect: inject verbatim text; the reply streams back as events.
   const text = action.effect.text ?? "";
   panel.showWorking();
-  void api.chatSend(spec.id, text).catch(() => panel.showError("Couldn't reach the session."));
+  void api.chatSend(spec.id, text).catch((e) => panel.showError(String(e)));
 }
 
 function handleSubmit(text: string): void {
   const spec = activeSpec();
   if (!spec) return;
   panel.showWorking();
-  void api.chatSend(spec.id, text).catch(() => panel.showError("Couldn't reach the session."));
+  void api.chatSend(spec.id, text).catch((e) => panel.showError(String(e)));
 }
 
 function handleSelectWidget(id: string): void {
