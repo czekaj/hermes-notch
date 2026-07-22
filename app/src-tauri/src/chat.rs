@@ -106,7 +106,12 @@ impl Chat {
         };
         #[cfg(debug_assertions)]
         if let Err(e) = &out {
-            eprintln!("[notch] chat: rpc {method} failed: {e}");
+            if method == "slash.exec" {
+                // Expected for skill commands — the chain proceeds to dispatch.
+                eprintln!("[notch] chat: slash.exec declined (normal, continuing via dispatch): {e}");
+            } else {
+                eprintln!("[notch] chat: rpc {method} failed: {e}");
+            }
         }
         out
     }
