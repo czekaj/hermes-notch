@@ -24,7 +24,7 @@
     { "id": "pause",   "label": "Pause",   "icon": "⏸", "style": "danger",
       "effect": { "type": "chat", "text": "pause" } },
     { "id": "refresh", "label": "Refresh", "icon": "⟳",
-      "effect": { "type": "chat", "text": "refresh" } }
+      "effect": { "type": "chat", "text": "/adhd refresh" } }
   ],
   "input": { "placeholder": "veto / park / anything…", "effect": { "type": "chat" } }
 }
