@@ -39,6 +39,10 @@ interface AppState {
   showSettings: boolean;
   forcedSettings: boolean;
   chatBodyLive: boolean;
+  /** Widgets with an agent turn in flight (streaming events keep this fresh). */
+  chatBusy: Set<string>;
+  /** Last completed reply per widget — survives collapse while a turn runs. */
+  lastReply: Record<string, string>;
 }
 
 const state: AppState = {
@@ -58,6 +62,8 @@ const state: AppState = {
   showSettings: false,
   forcedSettings: false,
   chatBodyLive: false,
+  chatBusy: new Set(),
+  lastReply: {},
 };
 
 const root = document.getElementById("app") as HTMLElement;
@@ -161,6 +167,8 @@ function settingsCtx(): SettingsContext {
               .chatReset(spec.id)
               .then(() => {
                 state.chatBodyLive = false;
+                state.chatBusy.delete(spec.id);
+                delete state.lastReply[spec.id];
                 state.showSettings = false;
                 paintPanel();
               })
@@ -349,7 +357,7 @@ function toggle(): void {
   else void expand();
 }
 
-// Pull the full Card (and chat history) for the active widget on expand/switch.
+// Pull the full Card (and chat body) for the active widget on expand/switch.
 async function refreshActive(): Promise<void> {
   const spec = activeSpec();
   if (!spec) {
@@ -363,17 +371,30 @@ async function refreshActive(): Promise<void> {
     /* keep glance card */
   }
   paintPanel();
-  if (isChat(spec)) {
-    try {
-      await api.chatEnsure(spec.id);
-      const hist = await api.chatHistory(spec.id);
-      if (hist.trim()) {
-        panel.showComplete(hist);
-        state.chatBodyLive = true;
-      }
-    } catch {
-      /* history is best-effort */
+  if (!isChat(spec)) return;
+
+  // A turn is in flight for this widget → show the working state, and let the
+  // streaming events (which update regardless of visibility) take over.
+  if (state.chatBusy.has(spec.id)) {
+    panel.showWorking();
+    return;
+  }
+  // A reply completed while we were collapsed → render it from the cache.
+  const cached = state.lastReply[spec.id];
+  if (cached?.trim()) {
+    panel.showComplete(cached);
+    state.chatBodyLive = true;
+    return;
+  }
+  try {
+    await api.chatEnsure(spec.id);
+    const hist = await api.chatHistory(spec.id);
+    if (hist.trim()) {
+      panel.showComplete(hist);
+      state.chatBodyLive = true;
     }
+  } catch {
+    /* history is best-effort */
   }
 }
 
@@ -440,11 +461,25 @@ function wireEvents(): void {
   });
 
   void api.onChatEvent((e) => {
-    if (e.widgetId !== state.activeId) return;
+    // Track turn state and the last reply for EVERY widget, visible or not —
+    // the user may collapse mid-turn and re-expand later (or after it ends).
     switch (e.kind) {
       case "start":
-        panel.showWorking();
+      case "status":
+        state.chatBusy.add(e.widgetId);
         break;
+      case "complete":
+        state.chatBusy.delete(e.widgetId);
+        state.lastReply[e.widgetId] = e.text ?? "";
+        break;
+      case "error":
+        state.chatBusy.delete(e.widgetId);
+        break;
+    }
+
+    if (e.widgetId !== state.activeId || !state.expanded) return;
+    switch (e.kind) {
+      case "start":
       case "status":
         panel.showWorking();
         break;
