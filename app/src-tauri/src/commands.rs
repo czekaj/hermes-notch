@@ -137,11 +137,16 @@ pub async fn connect(app: AppHandle, state: State<'_, AppState>) -> Result<HostI
         .cloned()
         .unwrap_or_default();
 
-    // Cache each widget's spec for chat-source lookups.
+    // The host returns wrapper items ({id, spec} or {id, error}); the app's
+    // contract (HostInfo.widgets: WidgetSpec[]) wants the bare specs. Unwrap
+    // once here — passing wrappers through left spec.actions/input/source
+    // undefined in the frontend (no buttons, no input, chat never ensured).
     let mut specs = HashMap::new();
+    let mut widget_specs = Vec::new();
     for item in &items {
         if let (Some(id), Some(spec)) = (item.get("id").and_then(|i| i.as_str()), item.get("spec")) {
             specs.insert(id.to_string(), spec.clone());
+            widget_specs.push(spec.clone());
         }
     }
     state.set_widgets(specs);
@@ -156,7 +161,7 @@ pub async fn connect(app: AppHandle, state: State<'_, AppState>) -> Result<HostI
     Ok(HostInfo {
         ok,
         host_version,
-        widgets: items,
+        widgets: widget_specs,
     })
 }
 
