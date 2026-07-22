@@ -11,6 +11,8 @@
   },
   "refresh": { "interval": 60, "while_visible": 15 },
   "actions": [
+    { "id": "start",   "label": "Start batch", "icon": "▶", "style": "primary",
+      "effect": { "type": "chat", "text": "/adhd" } },
     { "id": "done",    "label": "Done",    "icon": "✓", "style": "primary",
       "effect": { "type": "chat", "text": "done" } },
     { "id": "skip",    "label": "Skip",    "icon": "→",

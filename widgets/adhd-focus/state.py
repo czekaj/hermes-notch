@@ -80,7 +80,12 @@ def build_card(parsed: dict, mtime: datetime | None) -> dict:
     parked = sections.get("parked", [])
     triage = sections.get("triage", [])
 
+    # Protocol words (done/skip/…) only make sense while a step is open;
+    # otherwise the sole offered action is starting a new batch — a stray
+    # `done` right after /adhd could close a just-served task at source.
+    step_actions = ["done", "skip", "smaller", "why", "pause"]
     if open_steps:
+        actions_enabled = step_actions
         step = open_steps[0]
         pos = len(done_steps) + 1
         total = len(now_items)
@@ -95,6 +100,7 @@ def build_card(parsed: dict, mtime: datetime | None) -> dict:
         }
         title = f"Step {pos} of {total}"
     elif next_items:
+        actions_enabled = ["start"]
         glance = {
             "text": f"Batch clear — next up: {next_items[0]['text']}"[:60],
             "detail": f"{len(next_items)} queued",
@@ -102,7 +108,8 @@ def build_card(parsed: dict, mtime: datetime | None) -> dict:
         }
         title = "Batch clear"
     else:
-        glance = {"text": "Focus queue empty", "detail": "say /adhd to build one", "urgency": "normal"}
+        actions_enabled = ["start"]
+        glance = {"text": "Focus queue empty", "detail": "start a batch to build one", "urgency": "normal"}
         title = "Focus"
 
     body: list[dict] = []
@@ -135,6 +142,7 @@ def build_card(parsed: dict, mtime: datetime | None) -> dict:
         "glance": glance,
         "title": title,
         "body": body,
+        "actions_enabled": actions_enabled,
         "status": {"state": "stale" if stale else "ok",
                    "detail": f"queue updated {parsed['updated']}" if stale and parsed.get("updated") else ""},
         "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -148,9 +156,10 @@ def main() -> int:
     except FileNotFoundError:
         print(json.dumps({
             "card": 1,
-            "glance": {"text": "No focus queue yet", "detail": "say /adhd to start", "urgency": "normal"},
+            "glance": {"text": "No focus queue yet", "detail": "start a batch", "urgency": "normal"},
             "title": "Focus",
-            "body": [{"type": "text", "text": "No queue file at ~/.hermes/data/focus_queue.md — start a session with /adhd."}],
+            "body": [{"type": "text", "text": "No queue file at ~/.hermes/data/focus_queue.md — start a batch to build one."}],
+            "actions_enabled": ["start"],
             "status": {"state": "ok", "detail": ""},
             "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         }))
