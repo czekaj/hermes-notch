@@ -90,6 +90,8 @@ export const chatHistory = (widgetId: string): Promise<string> =>
   call("chat_history", { widgetId });
 export const chatInterrupt = (widgetId: string): Promise<void> =>
   call("chat_interrupt", { widgetId });
+export const chatReset = (widgetId: string): Promise<void> =>
+  call("chat_reset", { widgetId });
 
 // --- panel geometry ------------------------------------------------------
 // width/height are the measured size of the visible CSS shape (pill or panel);

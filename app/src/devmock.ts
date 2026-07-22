@@ -206,6 +206,8 @@ export function createMockBackend(): {
         return out(CHAT_HISTORY);
       case "chat_interrupt":
         return out(undefined);
+      case "chat_reset":
+        return out(undefined);
       case "set_expanded":
         return out(undefined);
       case "panel_info":

@@ -142,6 +142,8 @@ function panelData(): PanelData {
 }
 
 function settingsCtx(): SettingsContext {
+  const spec = activeSpec();
+  const chatActive = isChat(spec) && state.conn === "connected";
   return {
     canBack: !state.forcedSettings,
     onBack: () => {
@@ -151,6 +153,21 @@ function settingsCtx(): SettingsContext {
     onConnect: (values) => {
       void connectWith(values);
     },
+    ...(chatActive && spec
+      ? {
+          resetLabel: `Reset ${spec.name} session`,
+          onReset: () => {
+            void api
+              .chatReset(spec.id)
+              .then(() => {
+                state.chatBodyLive = false;
+                state.showSettings = false;
+                paintPanel();
+              })
+              .catch((e) => panel.showError(String(e)));
+          },
+        }
+      : {}),
   };
 }
 

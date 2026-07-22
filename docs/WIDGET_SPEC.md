@@ -88,12 +88,16 @@ be computed from files, databases, or APIs on the Hermes host.
 }
 ```
 
-**`chat`** — the widget is a live Hermes agent session. The host lazily opens a
-dedicated session (tagged `notch:<widget-id>`), sends `on_start` as the first
-message (aliases like `/adhd` resolve exactly as they do on Discord), and
-renders the **latest agent reply** as the Card body (markdown is translated:
-fenced code → copy blocks, links → link blocks, the rest → md blocks). Chat
-`actions` inject their text into the same session.
+**`chat`** — the widget is a live Hermes agent session. The client lazily opens
+a dedicated session (tagged `notch:<widget-id>`) and renders the **latest agent
+reply** as the Card body (markdown is translated: fenced code → copy blocks,
+links → link blocks, the rest → md blocks). Chat `actions` inject their text
+into the same session; aliases like `/adhd` resolve exactly as they do on
+Discord. `on_start` is the priming command: free-typed text into a session
+with no prior turns gets prefixed with it ("/adhd veto that"), so the skill
+and the input arrive in one turn. **Make every chat action self-sufficient**
+(a slash command, or a protocol word only enabled via `actions_enabled` when
+the session context necessarily exists) — never assume a warm session.
 
 ```jsonc
 "source": {

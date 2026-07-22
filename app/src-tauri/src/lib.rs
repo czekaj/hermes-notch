@@ -39,6 +39,7 @@ pub fn run() {
             commands::run_action,
             commands::chat_ensure,
             commands::chat_send,
+            commands::chat_reset,
             commands::chat_history,
             commands::chat_interrupt,
             commands::set_expanded,

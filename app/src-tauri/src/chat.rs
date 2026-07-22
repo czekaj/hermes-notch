@@ -42,6 +42,10 @@ struct SessionEntry {
     live: String,
     /// Durable id (`stored_session_id`) persisted across restarts.
     stored: String,
+    /// True once the session has conversational context (resumed with history,
+    /// or any turn submitted). Unprimed free text gets prefixed with the
+    /// widget's `on_start` command so the skill arrives with the input.
+    primed: bool,
 }
 
 /// A request to the connection task.
@@ -73,6 +77,7 @@ impl Chat {
                     SessionEntry {
                         live: String::new(),
                         stored,
+                        primed: true, // persisted sessions have prior turns
                     },
                 );
             }
@@ -124,7 +129,7 @@ impl Chat {
             .filter(|s| !s.is_empty())
     }
 
-    fn remember(&self, widget_id: &str, live: &str, stored: &str) {
+    fn remember(&self, widget_id: &str, live: &str, stored: &str, primed: bool) {
         if let Ok(mut s) = self.sessions.lock() {
             // Drop any stale reverse mapping for this widget's previous live id.
             if let Some(prev) = s.by_widget.get(widget_id) {
@@ -138,10 +143,48 @@ impl Chat {
                 SessionEntry {
                     live: live.to_string(),
                     stored: stored.to_string(),
+                    primed,
                 },
             );
             s.by_live.insert(live.to_string(), widget_id.to_string());
         }
+    }
+
+    fn is_primed(&self, widget_id: &str) -> bool {
+        self.sessions
+            .lock()
+            .ok()
+            .and_then(|s| s.by_widget.get(widget_id).map(|e| e.primed))
+            .unwrap_or(false)
+    }
+
+    fn mark_primed(&self, widget_id: &str) {
+        if let Ok(mut s) = self.sessions.lock() {
+            if let Some(e) = s.by_widget.get_mut(widget_id) {
+                e.primed = true;
+            }
+        }
+    }
+
+    /// Forget the widget's session entirely — the next interaction creates a
+    /// fresh gateway session (the old one stays on the host as plain history).
+    pub async fn reset(&self, widget_id: &str) -> Result<(), String> {
+        let live = self.live_in_memory(widget_id);
+        if let Some(live) = live {
+            // Best-effort: stop any running turn before we abandon it.
+            let _ = self
+                .rpc("session.interrupt", json!({ "session_id": live }))
+                .await;
+        }
+        if let Ok(mut s) = self.sessions.lock() {
+            if let Some(entry) = s.by_widget.remove(widget_id) {
+                if !entry.live.is_empty() {
+                    s.by_live.remove(&entry.live);
+                }
+            }
+        }
+        self.persist();
+        Ok(())
     }
 
     fn persist(&self) {
@@ -172,7 +215,7 @@ impl Chat {
                 .and_then(|s| s.as_str())
                 .unwrap_or(&stored)
                 .to_string();
-            self.remember(widget_id, &live, &stored);
+            self.remember(widget_id, &live, &stored, true);
             return Ok(live);
         }
         Err("no chat session yet — open the widget first".to_string())
@@ -180,13 +223,10 @@ impl Chat {
 
     // ---- public commands (PROTOCOL §3.1) ----
 
-    /// Resume the widget's stored session or create a fresh one; on a fresh
-    /// session, run `on_start` through the slash-resolution chain.
-    pub async fn ensure(
-        &self,
-        widget_id: &str,
-        on_start: Option<String>,
-    ) -> Result<ChatStatus, String> {
+    /// Resume the widget's stored session or create a fresh one. Never runs an
+    /// agent turn — priming happens in `send` (see the `primed` field), so a
+    /// mere hover/expand never costs tokens.
+    pub async fn ensure(&self, widget_id: &str) -> Result<ChatStatus, String> {
         if let Some(live) = self.live_in_memory(widget_id) {
             return Ok(ChatStatus {
                 session_id: live,
@@ -204,7 +244,7 @@ impl Chat {
                     .and_then(|s| s.as_str())
                     .unwrap_or(&stored)
                     .to_string();
-                self.remember(widget_id, &live, &stored);
+                self.remember(widget_id, &live, &stored, true);
                 return Ok(ChatStatus {
                     session_id: live,
                     fresh: false,
@@ -229,15 +269,8 @@ impl Chat {
             .and_then(|s| s.as_str())
             .unwrap_or(&live)
             .to_string();
-        self.remember(widget_id, &live, &stored);
+        self.remember(widget_id, &live, &stored, false);
         self.persist();
-
-        // Fresh session: send on_start (aliases resolve as on Discord).
-        if let Some(cmd) = on_start.filter(|s| !s.trim().is_empty()) {
-            if let Err(e) = self.resolve_and_submit(widget_id, &live, &cmd, 0).await {
-                self.emit_event(widget_id, "error", Some(&e));
-            }
-        }
         Ok(ChatStatus {
             session_id: live,
             fresh: true,
@@ -245,10 +278,34 @@ impl Chat {
     }
 
     /// Submit text: slash inputs go through the resolution chain, plain text is
-    /// a single `prompt.submit`. Replies stream back as `chat:event`s.
-    pub async fn send(&self, widget_id: &str, text: &str) -> Result<(), String> {
-        let live = self.live_or_resume(widget_id).await?;
-        self.resolve_and_submit(widget_id, &live, text, 0).await
+    /// a single `prompt.submit`. Free text into an unprimed session is prefixed
+    /// with `on_start` ("/adhd veto that") so the skill arrives with the input
+    /// in a single turn. Replies stream back as `chat:event`s.
+    pub async fn send(
+        &self,
+        widget_id: &str,
+        text: &str,
+        on_start: Option<String>,
+    ) -> Result<(), String> {
+        // Sending may need to create the session (e.g. reset, then a button).
+        let live = match self.live_or_resume(widget_id).await {
+            Ok(l) => l,
+            Err(_) => self.ensure(widget_id).await?.session_id,
+        };
+        let text = text.trim();
+        let effective = match on_start.filter(|s| !s.trim().is_empty()) {
+            Some(prime) if !text.starts_with('/') && !self.is_primed(widget_id) => {
+                format!("{} {}", prime.trim(), text)
+            }
+            _ => text.to_string(),
+        };
+        let out = self
+            .resolve_and_submit(widget_id, &live, &effective, 0)
+            .await;
+        if out.is_ok() {
+            self.mark_primed(widget_id);
+        }
+        out
     }
 
     /// Return the last assistant message's markdown ("" if none).

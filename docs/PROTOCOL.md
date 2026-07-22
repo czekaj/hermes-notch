@@ -135,10 +135,15 @@ get_state(widgetId: string): Card
 run_action(widgetId: string, actionId: string): Card | null  // script effects only
 
 // chat
-chat_ensure(widgetId: string): ChatStatus   // resume-or-create session; send on_start if fresh
-chat_send(widgetId: string, text: string): void   // slash chain per §2.3; replies stream as events
+chat_ensure(widgetId: string): ChatStatus   // resume-or-create session; NEVER runs a turn
+chat_send(widgetId: string, text: string): void
+// slash chain per §2.3; replies stream as events. Free text into a session
+// with no prior turns is prefixed with the widget's on_start command
+// ("/adhd veto that") so the skill arrives with the input in ONE turn.
+// Action buttons should send self-sufficient slash commands.
 chat_history(widgetId: string): string      // last assistant message markdown ("" if none)
 chat_interrupt(widgetId: string): void
+chat_reset(widgetId: string): void          // forget the session; next send creates fresh
 // ChatStatus = { session_id: string, fresh: boolean }
 
 // panel geometry (Rust owns the NSPanel frame, anchored to the notch top-center)

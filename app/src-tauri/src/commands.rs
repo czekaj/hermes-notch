@@ -206,19 +206,22 @@ pub async fn run_action(
 
 // ---- chat ----
 
+fn on_start_of(state: &State<'_, AppState>, widget_id: &str) -> Option<String> {
+    state.spec(widget_id).and_then(|s| {
+        s.get("source")
+            .and_then(|src| src.get("on_start"))
+            .and_then(|v| v.as_str())
+            .map(String::from)
+    })
+}
+
 #[tauri::command]
 pub async fn chat_ensure(
     state: State<'_, AppState>,
     widget_id: String,
 ) -> Result<ChatStatus, String> {
     let chat = state.chat().ok_or("not connected")?;
-    let on_start = state.spec(&widget_id).and_then(|s| {
-        s.get("source")
-            .and_then(|src| src.get("on_start"))
-            .and_then(|v| v.as_str())
-            .map(String::from)
-    });
-    chat.ensure(&widget_id, on_start).await
+    chat.ensure(&widget_id).await
 }
 
 #[tauri::command]
@@ -228,7 +231,17 @@ pub async fn chat_send(
     text: String,
 ) -> Result<(), String> {
     let chat = state.chat().ok_or("not connected")?;
-    chat.send(&widget_id, &text).await
+    let on_start = on_start_of(&state, &widget_id);
+    chat.send(&widget_id, &text, on_start).await
+}
+
+#[tauri::command]
+pub async fn chat_reset(
+    state: State<'_, AppState>,
+    widget_id: String,
+) -> Result<(), String> {
+    let chat = state.chat().ok_or("not connected")?;
+    chat.reset(&widget_id).await
 }
 
 #[tauri::command]

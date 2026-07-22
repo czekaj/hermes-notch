@@ -12,6 +12,9 @@ export interface SettingsContext {
   onConnect: (values: Settings) => void;
   onBack: () => void;
   canBack: boolean;
+  /** Present when the active widget is chat-backed: label + reset handler. */
+  resetLabel?: string;
+  onReset?: () => void;
 }
 
 export function renderSettings(
@@ -70,6 +73,16 @@ export function renderSettings(
   };
   connect.addEventListener("click", submit);
   root.append(connect);
+
+  // Danger-styled plain-text reset for the active chat widget's session —
+  // destructive actions never get a filled button in a HUD (DESIGN §Buttons).
+  if (ctx.onReset && ctx.resetLabel) {
+    const reset = el("button", "btn danger reset-session");
+    reset.type = "button";
+    reset.textContent = ctx.resetLabel;
+    reset.addEventListener("click", ctx.onReset);
+    root.append(reset);
+  }
 
   // Enter in any field submits.
   root.addEventListener("keydown", (e) => {
