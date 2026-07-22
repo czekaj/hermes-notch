@@ -254,6 +254,16 @@ body.has-notch .panel-face {
 }
 .panel-face.front {
   position: relative;
+  /* Header/actions/footer pinned; .body flexes and scrolls between them.
+     --panel-max-h is set at boot from the screen height. */
+  display: flex;
+  flex-direction: column;
+  max-height: var(--panel-max-h, 480px);
+}
+.panel-face.front > .panel-header,
+.panel-face.front > .actions,
+.panel-face.front > .footer {
+  flex: none;
 }
 .panel-face.back {
   position: absolute;
@@ -343,7 +353,8 @@ body.has-notch .panel-face {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  max-height: 232px;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   padding-bottom: 2px;
   -webkit-mask-image: linear-gradient(

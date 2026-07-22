@@ -524,6 +524,11 @@ async function boot(): Promise<void> {
   // Content-driven resizes (chat streaming, settings flip) → window follows.
   new ResizeObserver(() => syncFrame()).observe(panel.el);
 
+  // Cap the panel height to the screen so long replies scroll inside .body
+  // instead of growing past the window clamp (which would clip unscrollably).
+  const maxH = Math.round(Math.min(Math.max(280, screen.height * 0.55), 640));
+  document.documentElement.style.setProperty("--panel-max-h", `${maxH}px`);
+
   // Notch geometry → CSS vars so the strip hugs the island exactly.
   try {
     const pi = await api.panelInfo();
