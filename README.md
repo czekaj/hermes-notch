@@ -5,17 +5,22 @@ that lives around the camera notch. It renders **widgets** — glanceable,
 interactive cards backed by your Hermes skills — and sends your responses back
 into live agent sessions. One hover, one glance, one click, back to work.
 
-```
-        ┌───────────[ ▪ camera island ▪ ]───────────┐
-        └──╮ 🎯 Renew passport: book appointment · ~5m ╭──┘
-           ╰────────────────────────────────────────╯
-```
+![Collapsed: the glance strip hugging the camera island](docs/assets/hero-collapsed.png)
 
 The reference widget wraps an ADHD-focus skill: the collapsed strip shows the
-one step you should do next; expanding it shows the step with copyable
+one step you should do next; hovering expands it into a card with copyable
 commands and clickable links, and **Done / Skip / Smaller** buttons that go
 straight to the agent session running the skill — which closes the task at
 source and serves the next step.
+
+![Expanded: step card with copy chips, links, and actions](docs/assets/hero-expanded.png)
+
+Light mode follows the system automatically; settings live behind the gear —
+host, credentials, autostart, nothing else:
+
+| | |
+|---|---|
+| ![Light theme](docs/assets/light-expanded.png) | ![Settings](docs/assets/light-settings.png) |
 
 ## How it works
 
@@ -84,10 +89,14 @@ and start the host: `hermes serve --host 0.0.0.0 --port 9119`.
 cd app && npm install && npm run tauri build   # or: npm run tauri dev
 ```
 
-Launch, hover the notch, open settings (⚙), enter the host address and
-credentials, Connect. Same-machine dev shortcut: launch
+Launch, hover the notch, open settings (⚙), enter the host address and your
+**dashboard credentials** (the same login as the Hermes web dashboard — Notch
+is just another dashboard client), Connect. Same-machine dev shortcut: launch
 `HERMES_DASHBOARD_SESSION_TOKEN=<token> hermes serve` and put the token in
 the settings' token field instead of username/password.
+
+On Macs without a notch (external displays), the strip renders as a floating
+pill at the top-center of the screen instead.
 
 ## Writing widgets
 
