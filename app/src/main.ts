@@ -174,8 +174,8 @@ function syncFrame(): void {
     frameSyncQueued = false;
     const el = state.expanded ? panel.el : stripEl;
     if (!el) return;
-    const w = el.offsetWidth;
-    const h = el.offsetTop + el.offsetHeight;
+    const w = Math.max(el.offsetWidth, el.scrollWidth);
+    const h = el.offsetTop + Math.max(el.offsetHeight, el.scrollHeight);
     if (w < 40 || h < 20) return; // not laid out yet
     void api.setExpanded(state.expanded, Math.ceil(w) + 2, Math.ceil(h) + 2);
   });
@@ -296,6 +296,10 @@ async function expand(): Promise<void> {
   paintPanel(); // paints, then syncFrame() sizes the window to the panel
   panel.playEntrance();
   void refreshActive();
+  // Insurance re-measures: after the entrance animation settles and after
+  // fonts finish loading — both can grow the layout past the first measure.
+  window.setTimeout(syncFrame, 400);
+  void document.fonts.ready.then(() => syncFrame());
   restartPollers();
 }
 

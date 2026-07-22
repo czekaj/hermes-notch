@@ -84,6 +84,13 @@ mod imp {
         handler.on_mouse_entered(move |_event| {
             #[cfg(debug_assertions)]
             eprintln!("[notch] hover: enter");
+            // Non-activating panel: take key status so the webview receives
+            // clicks and typing without activating the app (the hover_activate
+            // example's pattern — without this, clicks are swallowed because
+            // the Accessory app never activates and the panel is never key).
+            if let Ok(panel) = enter_app.get_webview_panel("main") {
+                panel.make_key_window();
+            }
             let _ = enter_app.emit("notch:hover", json!({ "entered": true }));
         });
         let exit_app = app.clone();
@@ -107,6 +114,9 @@ mod imp {
             }
             #[cfg(debug_assertions)]
             eprintln!("[notch] hover: exit");
+            if let Ok(panel) = exit_app.get_webview_panel("main") {
+                panel.resign_key_window();
+            }
             let _ = exit_app.emit("notch:hover", json!({ "entered": false }));
         });
         panel.set_event_handler(Some(handler.as_ref()));
