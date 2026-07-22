@@ -85,6 +85,8 @@ and start the host: `hermes serve --host 0.0.0.0 --port 9119`.
 
 ### 2. The app (the Mac with the notch)
 
+Requires Node 20+ and **Rust ≥ 1.88** (`rustup update stable`).
+
 ```bash
 cd app && npm install && npm run tauri build   # or: npm run tauri dev
 ```
